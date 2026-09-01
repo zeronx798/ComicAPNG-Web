@@ -1,0 +1,12 @@
+ComicAPNG Web
+Copyright 2026 ComicAPNG contributors
+
+This product includes software developed by third parties:
+
+- apng-js, Copyright David Mzareulyan, MIT License
+- fflate, Copyright Arjun Barrett, MIT License
+- Lucide, ISC License
+- React, Copyright Meta Platforms, Inc. and affiliates, MIT License
+- Vite and vite-plugin-pwa, MIT License
+
+Complete dependency license texts are distributed by their respective packages.
