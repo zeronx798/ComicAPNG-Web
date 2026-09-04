@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
-  Fullscreen,
   GalleryVerticalEnd,
   Maximize2,
   PanelLeftClose,
@@ -31,11 +30,12 @@ import { FeatureHeader } from "../../components/FeatureHeader";
 import { IconButton } from "../../components/IconButton";
 import { ProgressBar } from "../../components/ProgressBar";
 import { useI18n } from "../../i18n";
+import { useLayoutMode } from "../../layouts/LayoutMode";
 import { readDirection, writeDirection } from "../../services/settings";
 import { decodeComic, type ProgressValue } from "../../workers/client";
 
 type FitMode = "page" | "width";
-const MOBILE_DRAWER_IDLE_MS = 3000;
+const THUMBNAIL_DRAWER_IDLE_MS = 3000;
 
 interface ReaderDocument {
   name: string;
@@ -60,6 +60,7 @@ function clampZoom(value: number): number {
 
 export function ReaderFeature() {
   const { t } = useI18n();
+  const layoutMode = useLayoutMode();
   const input = useRef<HTMLInputElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const thumbnailList = useRef<HTMLDivElement>(null);
@@ -69,7 +70,7 @@ export function ReaderFeature() {
     current: -1,
   });
   const thumbnailScrollPending = useRef(false);
-  const mobileDrawerTimer = useRef<number | null>(null);
+  const thumbnailDrawerTimer = useRef<number | null>(null);
   const pointers = useRef(new Map<number, PointerPosition>());
   const swipeStart = useRef<{ x: number; y: number; time: number } | null>(null);
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
@@ -81,11 +82,12 @@ export function ReaderFeature() {
   const [fitMode, setFitMode] = useState<FitMode>("page");
   const [zoom, setZoom] = useState(1);
   const [thumbnailsVisible, setThumbnailsVisible] = useState(true);
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [thumbnailDrawerOpen, setThumbnailDrawerOpen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<ProgressValue | null>(null);
   const [message, setMessage] = useState("");
+  const thumbnailDrawerExpanded = layoutMode === "compact" && thumbnailDrawerOpen;
 
   useEffect(() => {
     documentRef.current = document;
@@ -99,30 +101,32 @@ export function ReaderFeature() {
   );
 
   useEffect(() => {
-    if (mobileDrawerTimer.current !== null) {
-      window.clearTimeout(mobileDrawerTimer.current);
-      mobileDrawerTimer.current = null;
+    if (thumbnailDrawerTimer.current !== null) {
+      window.clearTimeout(thumbnailDrawerTimer.current);
+      thumbnailDrawerTimer.current = null;
     }
-    if (!mobileDrawerOpen) return;
-    mobileDrawerTimer.current = window.setTimeout(() => {
-      mobileDrawerTimer.current = null;
-      setMobileDrawerOpen(false);
-    }, MOBILE_DRAWER_IDLE_MS);
+    if (!thumbnailDrawerExpanded) return;
+    thumbnailDrawerTimer.current = window.setTimeout(() => {
+      thumbnailDrawerTimer.current = null;
+      setThumbnailDrawerOpen(false);
+    }, THUMBNAIL_DRAWER_IDLE_MS);
     return () => {
-      if (mobileDrawerTimer.current !== null) {
-        window.clearTimeout(mobileDrawerTimer.current);
-        mobileDrawerTimer.current = null;
+      if (thumbnailDrawerTimer.current !== null) {
+        window.clearTimeout(thumbnailDrawerTimer.current);
+        thumbnailDrawerTimer.current = null;
       }
     };
-  }, [mobileDrawerOpen]);
+  }, [thumbnailDrawerExpanded]);
 
-  const resetMobileDrawerTimer = () => {
-    if (!mobileDrawerOpen) return;
-    if (mobileDrawerTimer.current !== null) window.clearTimeout(mobileDrawerTimer.current);
-    mobileDrawerTimer.current = window.setTimeout(() => {
-      mobileDrawerTimer.current = null;
-      setMobileDrawerOpen(false);
-    }, MOBILE_DRAWER_IDLE_MS);
+  const resetThumbnailDrawerTimer = () => {
+    if (!thumbnailDrawerExpanded) return;
+    if (thumbnailDrawerTimer.current !== null) {
+      window.clearTimeout(thumbnailDrawerTimer.current);
+    }
+    thumbnailDrawerTimer.current = window.setTimeout(() => {
+      thumbnailDrawerTimer.current = null;
+      setThumbnailDrawerOpen(false);
+    }, THUMBNAIL_DRAWER_IDLE_MS);
   };
 
   const pageCount = document?.frameUrls.length ?? 0;
@@ -155,7 +159,7 @@ export function ReaderFeature() {
       container.scrollTo({ top, left, behavior: "auto" });
     }
     thumbnailScrollPending.current = false;
-  }, [controlsVisible, current, document, mobileDrawerOpen, thumbnailsVisible]);
+  }, [controlsVisible, current, document, layoutMode, thumbnailDrawerExpanded, thumbnailsVisible]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -226,7 +230,7 @@ export function ReaderFeature() {
       setCurrent(0);
       setZoom(1);
       setFitMode("page");
-      setMobileDrawerOpen(false);
+      setThumbnailDrawerOpen(false);
     } catch {
       setMessage(t("error.reader_failed"));
     } finally {
@@ -312,6 +316,13 @@ export function ReaderFeature() {
 
   const physicalLeft = direction === "ltr" ? previous : next;
   const physicalRight = direction === "ltr" ? next : previous;
+  const thumbnailPresentation =
+    layoutMode === "compact"
+      ? "drawer"
+      : layoutMode === "comfortable"
+        ? "compact-navigation"
+        : "persistent-navigation";
+  const thumbnailNavigationVisible = layoutMode === "compact" || thumbnailsVisible;
 
   return (
     <div
@@ -371,36 +382,43 @@ export function ReaderFeature() {
           />
         </div>
       ) : (
-        <div className="reader-workspace">
+        <div className="reader-workspace" data-navigation={thumbnailPresentation}>
           <aside
-            className={`reader-thumbnails ${thumbnailsVisible ? "open" : ""} ${mobileDrawerOpen ? "mobile-open" : ""}`}
+            className={`reader-thumbnails ${thumbnailNavigationVisible ? "open" : ""} ${thumbnailDrawerExpanded ? "drawer-open" : ""}`}
+            data-presentation={thumbnailPresentation}
             aria-label={t("reader.thumbnails")}
             data-testid="reader-thumbnail-drawer"
-            data-open={mobileDrawerOpen}
-            onScrollCapture={resetMobileDrawerTimer}
-            onPointerDown={resetMobileDrawerTimer}
-            onPointerMove={resetMobileDrawerTimer}
-            onPointerUp={resetMobileDrawerTimer}
-            onTouchStart={resetMobileDrawerTimer}
-            onWheel={resetMobileDrawerTimer}
-            onDragStart={resetMobileDrawerTimer}
-            onDragOver={resetMobileDrawerTimer}
-            onFocus={resetMobileDrawerTimer}
+            data-open={thumbnailDrawerExpanded}
+            onScrollCapture={resetThumbnailDrawerTimer}
+            onPointerDown={resetThumbnailDrawerTimer}
+            onPointerMove={resetThumbnailDrawerTimer}
+            onPointerUp={resetThumbnailDrawerTimer}
+            onTouchStart={resetThumbnailDrawerTimer}
+            onWheel={resetThumbnailDrawerTimer}
+            onDragStart={resetThumbnailDrawerTimer}
+            onDragOver={resetThumbnailDrawerTimer}
+            onFocus={resetThumbnailDrawerTimer}
           >
-            <button
-              type="button"
-              className="reader-drawer-handle"
-              data-testid="reader-drawer-toggle"
-              aria-expanded={mobileDrawerOpen}
-              aria-label={t(mobileDrawerOpen ? "reader.hide_thumbnails" : "reader.show_thumbnails")}
-              onClick={() => setMobileDrawerOpen((value) => !value)}
-            >
-              <ChevronUp aria-hidden="true" size={22} strokeWidth={2.2} />
-            </button>
-            <div className="reader-thumbnail-heading">
-              <span>{t("reader.thumbnails")}</span>
-              <strong>{t("common.pages", { count: pageCount })}</strong>
-            </div>
+            {layoutMode === "compact" && (
+              <button
+                type="button"
+                className="reader-drawer-handle"
+                data-testid="reader-drawer-toggle"
+                aria-expanded={thumbnailDrawerExpanded}
+                aria-label={t(
+                  thumbnailDrawerExpanded ? "reader.hide_thumbnails" : "reader.show_thumbnails",
+                )}
+                onClick={() => setThumbnailDrawerOpen((value) => !value)}
+              >
+                <ChevronUp aria-hidden="true" size={22} strokeWidth={2.2} />
+              </button>
+            )}
+            {layoutMode === "expanded" && (
+              <div className="reader-thumbnail-heading">
+                <span>{t("reader.thumbnails")}</span>
+                <strong>{t("common.pages", { count: pageCount })}</strong>
+              </div>
+            )}
             <div className="reader-thumbnail-list" ref={thumbnailList}>
               {document.thumbnailUrls.map((url, index) => (
                 <button
@@ -412,7 +430,7 @@ export function ReaderFeature() {
                   aria-current={current === index ? "page" : undefined}
                   onClick={() => {
                     setCurrent(index);
-                    resetMobileDrawerTimer();
+                    resetThumbnailDrawerTimer();
                   }}
                 >
                   <img src={url} alt="" />
@@ -455,12 +473,16 @@ export function ReaderFeature() {
           </div>
 
           <div className="reader-toolbar" role="toolbar">
-            <IconButton
-              icon={thumbnailsVisible ? PanelLeftClose : PanelLeftOpen}
-              label={t(thumbnailsVisible ? "reader.hide_thumbnails" : "reader.show_thumbnails")}
-              compact
-              onClick={() => setThumbnailsVisible((value) => !value)}
-            />
+            {layoutMode !== "compact" && (
+              <IconButton
+                icon={thumbnailsVisible ? PanelLeftClose : PanelLeftOpen}
+                label={t(
+                  thumbnailsVisible ? "reader.hide_thumbnails" : "reader.show_thumbnails",
+                )}
+                compact
+                onClick={() => setThumbnailsVisible((value) => !value)}
+              />
+            )}
             <div className="reader-navigation-controls">
               <IconButton
                 icon={ChevronLeft}
@@ -472,18 +494,22 @@ export function ReaderFeature() {
               <span className="reader-counter">
                 {t("reader.page_counter", { current: current + 1, total: pageCount })}
               </span>
-              <label className="page-jump">
-                <span className="visually-hidden">{t("reader.jump")}</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={pageCount}
-                  value={current + 1}
-                  onChange={(event) =>
-                    setCurrent(Math.max(0, Math.min(pageCount - 1, Number(event.target.value) - 1)))
-                  }
-                />
-              </label>
+              {layoutMode === "expanded" && (
+                <label className="page-jump">
+                  <span className="visually-hidden">{t("reader.jump")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={pageCount}
+                    value={current + 1}
+                    onChange={(event) =>
+                      setCurrent(
+                        Math.max(0, Math.min(pageCount - 1, Number(event.target.value) - 1)),
+                      )
+                    }
+                  />
+                </label>
+              )}
               <IconButton
                 icon={ChevronRight}
                 label={t("reader.next")}
@@ -493,19 +519,23 @@ export function ReaderFeature() {
               />
             </div>
             <div className="reader-view-controls">
-              <IconButton
-                icon={ZoomOut}
-                label={t("reader.zoom_out")}
-                compact
-                onClick={() => setZoom((value) => clampZoom(value - 0.25))}
-              />
-              <span>{t("common.zoom_percent", { value: Math.round(zoom * 100) })}</span>
-              <IconButton
-                icon={ZoomIn}
-                label={t("reader.zoom_in")}
-                compact
-                onClick={() => setZoom((value) => clampZoom(value + 0.25))}
-              />
+              {layoutMode === "expanded" && (
+                <>
+                  <IconButton
+                    icon={ZoomOut}
+                    label={t("reader.zoom_out")}
+                    compact
+                    onClick={() => setZoom((value) => clampZoom(value - 0.25))}
+                  />
+                  <span>{t("common.zoom_percent", { value: Math.round(zoom * 100) })}</span>
+                  <IconButton
+                    icon={ZoomIn}
+                    label={t("reader.zoom_in")}
+                    compact
+                    onClick={() => setZoom((value) => clampZoom(value + 0.25))}
+                  />
+                </>
+              )}
               <IconButton
                 icon={Scan}
                 label={t("reader.fit_page")}
@@ -516,29 +546,32 @@ export function ReaderFeature() {
                   setZoom(1);
                 }}
               />
-              <IconButton
-                icon={GalleryVerticalEnd}
-                label={t("reader.fit_width")}
-                compact
-                className={fitMode === "width" ? "active" : ""}
-                onClick={() => {
-                  setFitMode("width");
-                  setZoom(1);
-                }}
-              />
+              {layoutMode !== "compact" && (
+                <IconButton
+                  icon={GalleryVerticalEnd}
+                  label={t("reader.fit_width")}
+                  compact
+                  className={fitMode === "width" ? "active" : ""}
+                  onClick={() => {
+                    setFitMode("width");
+                    setZoom(1);
+                  }}
+                />
+              )}
               <IconButton icon={Maximize2} label={t("reader.fullscreen")} compact onClick={() => void fullscreen()} />
             </div>
-            <label className="direction-control">
-              <span>{t("reader.direction")}</span>
-              <select
-                value={direction}
-                onChange={(event) => changeDirection(event.target.value as ReadingDirection)}
-              >
-                <option value="ltr">{t("reader.direction_ltr")}</option>
-                <option value="rtl">{t("reader.direction_rtl")}</option>
-              </select>
-            </label>
-            <IconButton icon={Fullscreen} label={t("reader.fullscreen")} compact className="fullscreen-compact" onClick={() => void fullscreen()} />
+            {layoutMode !== "compact" && (
+              <label className="direction-control">
+                <span>{t("reader.direction")}</span>
+                <select
+                  value={direction}
+                  onChange={(event) => changeDirection(event.target.value as ReadingDirection)}
+                >
+                  <option value="ltr">{t("reader.direction_ltr")}</option>
+                  <option value="rtl">{t("reader.direction_rtl")}</option>
+                </select>
+              </label>
+            )}
           </div>
         </div>
       )}

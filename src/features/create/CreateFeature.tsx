@@ -37,6 +37,7 @@ import { FeatureHeader } from "../../components/FeatureHeader";
 import { IconButton } from "../../components/IconButton";
 import { ProgressBar } from "../../components/ProgressBar";
 import { useI18n } from "../../i18n";
+import { useLayoutMode } from "../../layouts/LayoutMode";
 
 interface SelectionBox {
   left: number;
@@ -88,6 +89,7 @@ function intersects(left: DOMRect, right: DOMRect): boolean {
 
 export function CreateFeature() {
   const { t } = useI18n();
+  const layoutMode = useLayoutMode();
   const [pages, setPages] = useState<ComicPage[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -111,6 +113,7 @@ export function CreateFeature() {
   const anchor = useRef<string | null>(null);
   const rectangleStart = useRef<RectangleStart | null>(null);
   const dragged = useRef<string | null>(null);
+  const pointerType = useRef("mouse");
 
   useEffect(() => {
     pagesRef.current = pages;
@@ -158,7 +161,7 @@ export function CreateFeature() {
 
   const pageClicked = (event: MouseEvent, id: string, index: number) => {
     const explicit = selectionMode || event.ctrlKey || event.metaKey || event.shiftKey;
-    if (!explicit && matchMedia("(pointer: coarse)").matches) return;
+    if (!explicit && event.detail !== 0 && pointerType.current !== "mouse") return;
     setSelected((current) => {
       if (event.shiftKey && anchor.current) {
         const anchorIndex = pages.findIndex((page) => page.id === anchor.current);
@@ -302,20 +305,31 @@ export function CreateFeature() {
     }
   };
 
-  const inspector = (
-    <aside className={`creator-inspector ${settingsOpen ? "open" : ""}`}>
+  const settingsPresentation =
+    layoutMode === "compact" ? "sheet" : layoutMode === "comfortable" ? "collapsible" : "persistent";
+  const settingsVisible = layoutMode === "expanded" || settingsOpen;
+  const inspector = settingsVisible ? (
+    <aside
+      id="creator-settings"
+      className="creator-inspector"
+      data-presentation={settingsPresentation}
+      role={layoutMode === "compact" ? "dialog" : undefined}
+      aria-modal={layoutMode === "compact" ? true : undefined}
+      aria-label={t("creator.settings_title")}
+    >
       <div className="inspector-header">
         <div>
           <span className="eyebrow">{t("creator.settings_title")}</span>
           <strong>{t("common.pages", { count: pages.length })}</strong>
         </div>
-        <IconButton
-          icon={X}
-          label={t("common.close")}
-          compact
-          className="mobile-only"
-          onClick={() => setSettingsOpen(false)}
-        />
+        {layoutMode !== "expanded" && (
+          <IconButton
+            icon={X}
+            label={t("common.close")}
+            compact
+            onClick={() => setSettingsOpen(false)}
+          />
+        )}
       </div>
       <div className="setting-field">
         <label htmlFor="cover-duration">{t("creator.cover_duration")}</label>
@@ -398,7 +412,7 @@ export function CreateFeature() {
         <span>{t("creator.export")}</span>
       </button>
     </aside>
-  );
+  ) : null;
 
   return (
     <div className="feature create-feature">
@@ -411,6 +425,18 @@ export function CreateFeature() {
               <FilePlus2 aria-hidden="true" size={19} />
               <span>{pages.length > 0 ? t("creator.add_more") : t("creator.add_images")}</span>
             </button>
+            {layoutMode !== "expanded" && (
+              <button
+                type="button"
+                className="button creator-settings-toggle"
+                aria-controls="creator-settings"
+                aria-expanded={settingsOpen}
+                onClick={() => setSettingsOpen((value) => !value)}
+              >
+                <Settings2 aria-hidden="true" size={19} />
+                <span>{t("common.settings")}</span>
+              </button>
+            )}
             <button
               type="button"
               className="button primary"
@@ -443,7 +469,11 @@ export function CreateFeature() {
         />
       )}
 
-      <div className="creator-layout">
+      <div
+        className="creator-layout"
+        data-settings-open={settingsVisible}
+        data-settings-presentation={settingsPresentation}
+      >
         <div className="creator-content">
           {pages.length === 0 ? (
             <DropSurface
@@ -552,6 +582,9 @@ export function CreateFeature() {
                     draggable
                     aria-pressed={selected.has(page.id)}
                     aria-label={t("aria.select_page", { number: index + 1 })}
+                    onPointerDown={(event) => {
+                      pointerType.current = event.pointerType;
+                    }}
                     onClick={(event) => pageClicked(event, page.id, index)}
                     onDragStart={(event) => {
                       dragged.current = page.id;
@@ -592,45 +625,56 @@ export function CreateFeature() {
             </>
           )}
         </div>
+        {layoutMode === "compact" && settingsOpen && (
+          <button
+            type="button"
+            className="creator-settings-scrim"
+            aria-label={t("common.close")}
+            onClick={() => setSettingsOpen(false)}
+          />
+        )}
         {inspector}
       </div>
 
-      <div className="creator-mobile-actions">
-        <button type="button" onClick={chooseFiles} disabled={busy}>
-          <FilePlus2 aria-hidden="true" size={21} />
-          <span>{t("common.add")}</span>
-        </button>
-        <button
-          type="button"
-          className={selectionMode ? "active" : ""}
-          disabled={pages.length === 0}
-          onClick={() => {
-            setSelectionMode((value) => !value);
-            setSelected(new Set());
-          }}
-        >
-          <CheckSquare aria-hidden="true" size={21} />
-          <span>{t("common.select")}</span>
-        </button>
-        <button
-          type="button"
-          disabled={pages.length === 0}
-          onClick={() => setSettingsOpen(true)}
-          aria-label={t("creator.show_settings")}
-        >
-          <Settings2 aria-hidden="true" size={21} />
-          <span>{t("common.settings")}</span>
-        </button>
-        <button
-          type="button"
-          className="primary"
-          disabled={pages.length === 0 || busy}
-          onClick={() => void exportComic()}
-        >
-          <Save aria-hidden="true" size={21} />
-          <span>{t("creator.export")}</span>
-        </button>
-      </div>
+      {layoutMode === "compact" && (
+        <div className="creator-compact-actions">
+          <button type="button" onClick={chooseFiles} disabled={busy}>
+            <FilePlus2 aria-hidden="true" size={21} />
+            <span>{t("common.add")}</span>
+          </button>
+          <button
+            type="button"
+            className={selectionMode ? "active" : ""}
+            disabled={pages.length === 0}
+            onClick={() => {
+              setSelectionMode((value) => !value);
+              setSelected(new Set());
+            }}
+          >
+            <CheckSquare aria-hidden="true" size={21} />
+            <span>{t("common.select")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label={t("creator.show_settings")}
+            aria-controls="creator-settings"
+            aria-expanded={settingsOpen}
+          >
+            <Settings2 aria-hidden="true" size={21} />
+            <span>{t("common.settings")}</span>
+          </button>
+          <button
+            type="button"
+            className="primary"
+            disabled={pages.length === 0 || busy}
+            onClick={() => void exportComic()}
+          >
+            <Save aria-hidden="true" size={21} />
+            <span>{t("creator.export")}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

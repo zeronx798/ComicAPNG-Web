@@ -28,7 +28,7 @@ for (const viewport of [
   { width: 390, height: 844 },
   { width: 430, height: 932 },
 ]) {
-  test(`phone portrait ${viewport.width}x${viewport.height} uses a resizing thumbnail drawer`, async ({
+  test(`compact ${viewport.width}x${viewport.height} uses a resizing thumbnail drawer`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
