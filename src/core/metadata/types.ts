@@ -13,6 +13,8 @@ export interface ComicPrivateMetadata extends Record<string, unknown> {
   version?: number;
   cover_index?: number;
   reading_direction?: "ltr" | "rtl";
+  cover_duration_ms?: number;
+  body_duration_ms?: number;
   pages?: ComicPrivatePage[];
 }
 

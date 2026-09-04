@@ -6,11 +6,11 @@ ComicAPNG Web is a browser-native PWA sibling of ComicAPNG Desktop. It has no ba
 
 ## Stack and Architecture
 
-- TypeScript, React, Vite, and CSS media queries implement the application.
+- TypeScript, React, Vite, and layout-mode CSS implement the application.
 - `vite-plugin-pwa` generates a Workbox service worker for the application shell.
 - Web Workers perform APNG encoding, generic APNG compositing, thumbnail generation, and extraction encoding where `OffscreenCanvas` is available. WebKit uses the same adapter through a cooperative HTML Canvas fallback and yields between frames.
 - `apng-js` parses generic APNG subframes; `fflate` provides zlib and ZIP primitives.
-- IndexedDB stores reading positions. Local storage holds lightweight language, duration, direction, and update-check settings.
+- Local storage holds lightweight language, duration, direction, and update-check settings.
 - Vitest covers pure models and APNG binary behavior. Playwright covers browser workflows, responsive structure, compatibility smoke tests, and offline reload.
 
 Feature components depend on internal adapters, not third-party codec APIs. Create, Extract, and Read remain mounted when navigation changes so in-progress local state is not discarded.
@@ -19,7 +19,11 @@ Feature components depend on internal adapters, not third-party codec APIs. Crea
 
 Image files are sorted naturally by filename. Import creates an oriented browser bitmap, records its dimensions, produces a bounded thumbnail, then closes the full bitmap. The original `File` remains the full-resolution source.
 
-Desktop supports Ctrl or Command selection, Shift range selection, rubber-band selection, and drag reorder. Touch layouts expose selection mode, Select All, Delete, Set Cover, Move Earlier, Move Later, Move to Beginning, and Move to End. Drag is never the only reorder method.
+Animated PNG import composites frames in order and materializes them as ordinary editable PNG pages with their frame durations. Valid ComicAPNG geometry restores original page bounds; generic APNG uses the composited canvas. Supported ZIP image entries are decoded in memory. Archives without metadata use natural filename order. Version 1 `metadata.json` page bindings must exactly match every supported image filename before order, cover, timing, direction, Title, or Author data is restored.
+
+ZIP import validates every entry before decompression. Absolute, drive-qualified, parent-traversal, backslash, duplicate, encrypted, oversized, and unsupported-compression image entries are rejected. Only PNG, JPEG, WebP, and BMP entries are considered pages; unrelated files are ignored. No archive entry is written to a local path.
+
+Mouse and keyboard input support Ctrl or Command selection, Shift range selection, rubber-band selection, and drag reorder. Coarse pointer interactions expose selection mode, Select All, Delete, Set Cover, Move Earlier, Move Later, Move to Beginning, and Move to End. Drag is never the only reorder method.
 
 The cover is unique. Export moves it to logical frame zero without duplication. Default cover duration is 10,000 milliseconds and default body duration is 5,000 milliseconds. Inputs display seconds with three decimals while the model retains integer milliseconds.
 
@@ -45,8 +49,6 @@ Generic APNG subframes are decoded and composited sequentially according to disp
 
 The reader uses compressed page and thumbnail Blob URLs. It provides previous/next, direct page input, thumbnail navigation, zoom from 25 to 400 percent, fit-page, fit-width, fullscreen, physical tap zones, swipe navigation, pinch zoom, and LTR/RTL gesture mapping. Stored APNG durations never force page advancement.
 
-Reader progress uses a SHA-256 fingerprint derived from file size plus bounded beginning and ending samples. The position is clamped to the current frame count and stored in IndexedDB.
-
 ## Metadata
 
 Metadata categories remain independent and optional:
@@ -59,11 +61,12 @@ Malformed private JSON is treated as absent. Create, Extract, and Read never req
 
 ## Responsive Presentation
 
-- Desktop 1440x900: full 184px navigation rail, feature header actions, main workspace, and persistent Create inspector.
-- Tablet landscape 1024x768: compact 86px icon navigation rail and narrower shared-state inspector.
-- Tablet portrait 768x1024: top app bar, bottom primary navigation, and sheet-based Create settings.
-- Phone portrait 390x844: thumbnail-first Create layout, explicit selection mode, bottom Add/Select/Settings/Export actions, stacked Extract cards, and overlay reader thumbnails.
-- Phone landscape 844x390: compact creator chrome; Reader hides global navigation and uses content-first overlays and hideable controls.
+- One `LayoutModeProvider` measures the viewport, owns the resize listener, and publishes `compact`, `comfortable`, or `expanded`. The app shell exposes that result as `data-layout`; CSS never classifies the viewport independently.
+- `compact` is used below 640px of available width. Create uses a settings sheet and action bar. Reader uses a bottom thumbnail drawer that takes a grid row and never covers the page.
+- `comfortable` is used from 640px of width, or whenever an otherwise wide viewport is shorter than 640px. The shell and Reader use compact navigation rails, while Create exposes a collapsible inline inspector.
+- `expanded` requires at least 1000px of width and 640px of height. It keeps the full application rail, Create inspector, and Reader thumbnail navigation persistent by default.
+
+Width reserves enough horizontal room for the editor and its controls. The expanded height floor avoids committing short windows to persistent chrome. Orientation, user agent, and device identity are not inputs, so tall narrow viewports and portrait viewports follow the same space-based rules as every other window.
 
 Touch targets grow under coarse pointers. Hover, right click, modifier keys, and drag are never required for a core action.
 
@@ -79,7 +82,7 @@ Builds inject the resolved display version, commit SHA, and build date. Generate
 
 The `version` field in `package.json` is the one canonical project version and uses `x.y.z` without a leading `v`. `scripts/version.mjs` reads it and owns release-tag grammar, tag/package consistency, display identity, release titles, and archive names.
 
-A non-tag build resolves to `v<package-version>-dirty`. In this project, `dirty` means "not an official tagged release build"; it does not describe the literal Git working tree. Local builds, pull requests, main pushes, and manual workflow runs therefore resolve to `v0.1.0-dirty` while the package version is `0.1.0`.
+A non-tag build resolves to `v<package-version>-dirty`. In this project, `dirty` means "not an official tagged release build"; it does not describe the literal Git working tree. Local builds, pull requests, main pushes, and manual workflow runs therefore resolve to `v0.1.1-dirty` while the package version is `0.1.1`.
 
 Matching stable and RC tags remove the suffix. For example, package version `0.2.0` accepts `v0.2.0` and `v0.2.0-rc.1`, but rejects either tag when the package version is different. Malformed `v*` tags also fail. Generated archives use `ComicAPNG-Web-<resolved-version>.zip`, and `SHA256SUMS.txt` names that exact archive.
 

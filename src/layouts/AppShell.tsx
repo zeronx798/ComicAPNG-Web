@@ -2,6 +2,7 @@ import { BookOpen, Images, PackageOpen, Settings, ShieldCheck, WifiOff } from "l
 import { useState, type ReactNode } from "react";
 import { useI18n } from "../i18n";
 import { useUpdate } from "../services/update";
+import { useLayoutMode } from "./LayoutMode";
 import { SettingsDrawer } from "./SettingsDrawer";
 
 export type FeatureId = "create" | "extract" | "read";
@@ -66,10 +67,11 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { t } = useI18n();
+  const layoutMode = useLayoutMode();
   const [settingsOpen, setSettingsOpen] = useState(false);
   return (
-    <div className={`app-shell active-${active}`}>
-      <aside className="desktop-sidebar">
+    <div className={`app-shell active-${active}`} data-layout={layoutMode}>
+      <aside className="sidebar-navigation">
         <div className="brand-block">
           <img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} alt="" />
           <div>
@@ -88,8 +90,8 @@ export function AppShell({
         </div>
       </aside>
 
-      <header className="mobile-app-bar">
-        <div className="mobile-brand">
+      <header className="top-app-bar">
+        <div className="app-bar-brand">
           <img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} alt="" />
           <strong>{t("app.name")}</strong>
         </div>
@@ -105,7 +107,7 @@ export function AppShell({
       </header>
 
       <main className="app-main">{children}</main>
-      <div className="mobile-navigation">
+      <div className="bottom-navigation">
         <Navigation active={active} onChange={onChange} />
       </div>
       <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />

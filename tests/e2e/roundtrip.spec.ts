@@ -63,9 +63,8 @@ test("create, extract, and read complete a fixed-canvas round trip", async ({ pa
   await expect(page.locator(".reader-counter")).toHaveText("1 / 2");
   await page.getByRole("button", { name: "Next page" }).last().click();
   await expect(page.locator(".reader-counter")).toHaveText("2 / 2");
-  await page.waitForTimeout(100);
   await page.reload();
   await page.locator('[data-testid="nav-read"]:visible').click();
   await page.locator('.reader-feature input[type="file"]').setInputFiles(comicPath!);
-  await expect(page.locator(".reader-counter")).toHaveText("2 / 2");
+  await expect(page.locator(".reader-counter")).toHaveText("1 / 2");
 });

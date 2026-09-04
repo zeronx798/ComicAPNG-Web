@@ -1,5 +1,6 @@
 import { unzlibSync } from "fflate";
 import { ApngEncoder } from "../../src/core/apng/encoder";
+import { metadataChunks } from "../../src/core/metadata";
 import {
   PNG_SIGNATURE,
   compressRgba,
@@ -32,6 +33,68 @@ export function makeApng(): Buffer {
   }
   encoder.addFrame(first, 3000);
   encoder.addFrame(second, 1000);
+  return Buffer.from(encoder.finish());
+}
+
+export function makeSingleFrameApng(): Buffer {
+  const encoder = new ApngEncoder(5, 3, 1);
+  const frame = new Uint8Array(5 * 3 * 4);
+  for (let offset = 0; offset < frame.length; offset += 4) {
+    frame.set([60, 100, 220, 255], offset);
+  }
+  encoder.addFrame(frame, 640);
+  return Buffer.from(encoder.finish());
+}
+
+export function makeEditableApng(): Buffer {
+  const width = 6;
+  const height = 4;
+  const chunks = metadataChunks({
+    text: { Title: "Imported APNG", Author: "Frame author" },
+    privateMetadata: {
+      format: "ComicAPNG",
+      version: 1,
+      cover_index: 1,
+      reading_direction: "rtl",
+      cover_duration_ms: 1800,
+      body_duration_ms: 900,
+      pages: [
+        {
+          source_width: 1,
+          source_height: 2,
+          render_width: 2,
+          render_height: 4,
+          offset_x: 2,
+          offset_y: 0,
+          duration_ms: 250,
+        },
+        {
+          source_width: 3,
+          source_height: 1,
+          render_width: 6,
+          render_height: 2,
+          offset_x: 0,
+          offset_y: 1,
+          duration_ms: 750,
+        },
+      ],
+    },
+  }, true);
+  const encoder = new ApngEncoder(width, height, 2, chunks);
+  const first = new Uint8Array(width * height * 4);
+  const second = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 2; x < 4; x += 1) {
+      first.set([220, 30, 40, 255], (y * width + x) * 4);
+    }
+  }
+  for (let y = 1; y < 3; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      second.set([30, 200, 80, 255], (y * width + x) * 4);
+    }
+  }
+  encoder.addFrame(first, 250);
+  encoder.addFrame(second, 750);
   return Buffer.from(encoder.finish());
 }
 

@@ -14,7 +14,7 @@ test("@smoke application shell exposes all local workflows", async ({ page }) =>
   await page.locator('[data-testid="nav-read"]:visible').click();
   await expect(page.getByRole("heading", { name: "Read APNG Comic" })).toBeVisible();
   await expect(page.getByText("Local only").first()).toBeVisible();
-  await page.locator(".desktop-sidebar .sidebar-footer button").click();
+  await page.locator(".sidebar-navigation .sidebar-footer button").click();
   await expect(page.getByTestId("app-version")).toHaveText(buildInfo.version);
 });
 
