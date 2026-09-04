@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  ChevronUp,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -30,22 +31,17 @@ import { FeatureHeader } from "../../components/FeatureHeader";
 import { IconButton } from "../../components/IconButton";
 import { ProgressBar } from "../../components/ProgressBar";
 import { useI18n } from "../../i18n";
-import {
-  fingerprintFile,
-  loadReaderProgress,
-  saveReaderProgress,
-} from "../../services/readerProgress";
 import { readDirection, writeDirection } from "../../services/settings";
 import { decodeComic, type ProgressValue } from "../../workers/client";
 
 type FitMode = "page" | "width";
+const MOBILE_DRAWER_IDLE_MS = 3000;
 
 interface ReaderDocument {
   name: string;
   info: ApngInfo;
   frameUrls: string[];
   thumbnailUrls: string[];
-  fingerprint: string;
 }
 
 interface PointerPosition {
@@ -73,6 +69,7 @@ export function ReaderFeature() {
     current: -1,
   });
   const thumbnailScrollPending = useRef(false);
+  const mobileDrawerTimer = useRef<number | null>(null);
   const pointers = useRef(new Map<number, PointerPosition>());
   const swipeStart = useRef<{ x: number; y: number; time: number } | null>(null);
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
@@ -84,6 +81,7 @@ export function ReaderFeature() {
   const [fitMode, setFitMode] = useState<FitMode>("page");
   const [zoom, setZoom] = useState(1);
   const [thumbnailsVisible, setThumbnailsVisible] = useState(true);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<ProgressValue | null>(null);
@@ -100,13 +98,36 @@ export function ReaderFeature() {
     [],
   );
 
+  useEffect(() => {
+    if (mobileDrawerTimer.current !== null) {
+      window.clearTimeout(mobileDrawerTimer.current);
+      mobileDrawerTimer.current = null;
+    }
+    if (!mobileDrawerOpen) return;
+    mobileDrawerTimer.current = window.setTimeout(() => {
+      mobileDrawerTimer.current = null;
+      setMobileDrawerOpen(false);
+    }, MOBILE_DRAWER_IDLE_MS);
+    return () => {
+      if (mobileDrawerTimer.current !== null) {
+        window.clearTimeout(mobileDrawerTimer.current);
+        mobileDrawerTimer.current = null;
+      }
+    };
+  }, [mobileDrawerOpen]);
+
+  const resetMobileDrawerTimer = () => {
+    if (!mobileDrawerOpen) return;
+    if (mobileDrawerTimer.current !== null) window.clearTimeout(mobileDrawerTimer.current);
+    mobileDrawerTimer.current = window.setTimeout(() => {
+      mobileDrawerTimer.current = null;
+      setMobileDrawerOpen(false);
+    }, MOBILE_DRAWER_IDLE_MS);
+  };
+
   const pageCount = document?.frameUrls.length ?? 0;
   const previous = () => setCurrent((value) => Math.max(0, value - 1));
   const next = () => setCurrent((value) => Math.min(pageCount - 1, value + 1));
-
-  useEffect(() => {
-    if (document) void saveReaderProgress(document.fingerprint, current);
-  }, [current, document]);
 
   useLayoutEffect(() => {
     if (
@@ -134,7 +155,7 @@ export function ReaderFeature() {
       container.scrollTo({ top, left, behavior: "auto" });
     }
     thumbnailScrollPending.current = false;
-  }, [controlsVisible, current, document, thumbnailsVisible]);
+  }, [controlsVisible, current, document, mobileDrawerOpen, thumbnailsVisible]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -173,7 +194,7 @@ export function ReaderFeature() {
     setMessage("");
     setProgress({ current: 0, total: 1 });
     try {
-      const [buffer, fingerprint] = await Promise.all([file.arrayBuffer(), fingerprintFile(file)]);
+      const buffer = await file.arrayBuffer();
       const info = inspectApng(new Uint8Array(buffer));
       setProgress({ current: 0, total: info.frameCount });
       const decoded = await decodeComic(
@@ -192,9 +213,7 @@ export function ReaderFeature() {
         info: decoded.info,
         frameUrls,
         thumbnailUrls,
-        fingerprint,
       };
-      const restored = await loadReaderProgress(fingerprint, frameUrls.length);
       const privateDirection = decoded.info.metadata.privateMetadata.reading_direction;
       if (privateDirection === "ltr" || privateDirection === "rtl") {
         setDirection(privateDirection);
@@ -204,10 +223,10 @@ export function ReaderFeature() {
         releaseDocument(existing);
         return nextDocument;
       });
-      setCurrent(restored);
+      setCurrent(0);
       setZoom(1);
       setFitMode("page");
-      if (restored > 0) setMessage(t("reader.progress_restored"));
+      setMobileDrawerOpen(false);
     } catch {
       setMessage(t("error.reader_failed"));
     } finally {
@@ -353,7 +372,31 @@ export function ReaderFeature() {
         </div>
       ) : (
         <div className="reader-workspace">
-          <aside className={`reader-thumbnails ${thumbnailsVisible ? "open" : ""}`} aria-label={t("reader.thumbnails")}>
+          <aside
+            className={`reader-thumbnails ${thumbnailsVisible ? "open" : ""} ${mobileDrawerOpen ? "mobile-open" : ""}`}
+            aria-label={t("reader.thumbnails")}
+            data-testid="reader-thumbnail-drawer"
+            data-open={mobileDrawerOpen}
+            onScrollCapture={resetMobileDrawerTimer}
+            onPointerDown={resetMobileDrawerTimer}
+            onPointerMove={resetMobileDrawerTimer}
+            onPointerUp={resetMobileDrawerTimer}
+            onTouchStart={resetMobileDrawerTimer}
+            onWheel={resetMobileDrawerTimer}
+            onDragStart={resetMobileDrawerTimer}
+            onDragOver={resetMobileDrawerTimer}
+            onFocus={resetMobileDrawerTimer}
+          >
+            <button
+              type="button"
+              className="reader-drawer-handle"
+              data-testid="reader-drawer-toggle"
+              aria-expanded={mobileDrawerOpen}
+              aria-label={t(mobileDrawerOpen ? "reader.hide_thumbnails" : "reader.show_thumbnails")}
+              onClick={() => setMobileDrawerOpen((value) => !value)}
+            >
+              <ChevronUp aria-hidden="true" size={22} strokeWidth={2.2} />
+            </button>
             <div className="reader-thumbnail-heading">
               <span>{t("reader.thumbnails")}</span>
               <strong>{t("common.pages", { count: pageCount })}</strong>
@@ -367,7 +410,10 @@ export function ReaderFeature() {
                   className={current === index ? "active" : ""}
                   aria-label={t("common.page", { number: index + 1 })}
                   aria-current={current === index ? "page" : undefined}
-                  onClick={() => setCurrent(index)}
+                  onClick={() => {
+                    setCurrent(index);
+                    resetMobileDrawerTimer();
+                  }}
                 >
                   <img src={url} alt="" />
                   <span>{index + 1}</span>
@@ -411,7 +457,7 @@ export function ReaderFeature() {
           <div className="reader-toolbar" role="toolbar">
             <IconButton
               icon={thumbnailsVisible ? PanelLeftClose : PanelLeftOpen}
-              label={t(thumbnailsVisible ? "reader.hide_controls" : "reader.show_thumbnails")}
+              label={t(thumbnailsVisible ? "reader.hide_thumbnails" : "reader.show_thumbnails")}
               compact
               onClick={() => setThumbnailsVisible((value) => !value)}
             />

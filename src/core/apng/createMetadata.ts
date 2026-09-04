@@ -15,6 +15,8 @@ export function createPrivateMetadata(
     version: PRIVATE_SCHEMA_VERSION,
     cover_index: 0,
     reading_direction: request.readingDirection,
+    cover_duration_ms: request.coverDurationMs,
+    body_duration_ms: request.bodyDurationMs,
     pages: request.pages.map((page, index) => {
       const layout = layouts[index];
       if (!layout) throw new Error("apng.layout_missing");

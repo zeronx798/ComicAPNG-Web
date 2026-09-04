@@ -1,11 +1,9 @@
 import {
   Check,
-  CloudOff,
   ExternalLink,
   Info,
   Languages,
   RefreshCw,
-  ShieldCheck,
   WifiOff,
   X,
 } from "lucide-react";
@@ -57,22 +55,6 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
                 </button>
               ))}
             </div>
-          </section>
-
-          <section className="settings-section callout">
-            <div className="settings-heading">
-              <ShieldCheck aria-hidden="true" size={20} />
-              <h3>{t("settings.privacy_title")}</h3>
-            </div>
-            <p>{t("settings.privacy_body")}</p>
-          </section>
-
-          <section className="settings-section">
-            <div className="settings-heading">
-              <CloudOff aria-hidden="true" size={20} />
-              <h3>{t("settings.offline_title")}</h3>
-            </div>
-            <p>{t("settings.offline_body")}</p>
           </section>
 
           <section className="settings-section">

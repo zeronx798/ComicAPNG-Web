@@ -22,6 +22,8 @@ export interface ExportPage {
 export interface ComicExportRequest {
   pages: ExportPage[];
   readingDirection: ReadingDirection;
+  coverDurationMs: number;
+  bodyDurationMs: number;
   textMetadata: Record<string, string>;
 }
 

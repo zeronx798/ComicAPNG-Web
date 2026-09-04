@@ -1,5 +1,5 @@
 import { FileImage, Upload } from "lucide-react";
-import { useState, type DragEvent, type ReactNode } from "react";
+import { useState, type DragEvent } from "react";
 
 interface DropSurfaceProps {
   title: string;
@@ -7,7 +7,6 @@ interface DropSurfaceProps {
   action: string;
   onChoose: () => void;
   onFiles: (files: File[]) => void;
-  children?: ReactNode;
   compact?: boolean;
 }
 
@@ -17,7 +16,6 @@ export function DropSurface({
   action,
   onChoose,
   onFiles,
-  children,
   compact,
 }: DropSurfaceProps) {
   const [dragging, setDragging] = useState(false);
@@ -52,7 +50,6 @@ export function DropSurface({
         <FileImage aria-hidden="true" size={19} />
         <span>{action}</span>
       </button>
-      {children}
     </div>
   );
 }

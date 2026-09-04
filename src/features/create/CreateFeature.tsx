@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Crown,
   FilePlus2,
-  Images,
   Save,
   Settings2,
   Trash2,
@@ -28,7 +27,8 @@ import {
   type ComicPage,
   type ReadingDirection,
 } from "../../core/comic/types";
-import { importImages, releasePage } from "../../core/image/importer";
+import { releasePage } from "../../core/image/importer";
+import { importComicFiles } from "../../services/documentImport";
 import { downloadBlob } from "../../services/download";
 import { readDirection, readNumber, writeDirection, writeNumber } from "../../services/settings";
 import { encodeComic, type ProgressValue } from "../../workers/client";
@@ -129,12 +129,26 @@ export function CreateFeature() {
     if (busy || files.length === 0) return;
     setBusy(true);
     setMessage("");
-    const result = await importImages(files, pages.length > 0);
-    setPages((current) => [...current, ...result.pages]);
-    if (result.failures > 0) {
-      setMessage(t("creator.import_failed", { count: result.failures }));
+    try {
+      const result = await importComicFiles(files, pages.length > 0);
+      setPages((current) => [...current, ...result.pages]);
+      if (result.settings) {
+        setDirection(result.settings.readingDirection);
+        setCoverDurationMs(result.settings.coverDurationMs);
+        setBodyDurationMs(result.settings.bodyDurationMs);
+        setMetadataTitle(result.settings.title ?? "");
+        setMetadataAuthor(result.settings.author ?? "");
+      }
+      const messages = result.notices.map((notice) => t(`creator.${notice}`));
+      if (result.failures > 0) {
+        messages.push(t("creator.import_failed", { count: result.failures }));
+      }
+      setMessage(messages.join(" "));
+    } catch {
+      setMessage(t("creator.import_failed", { count: files.length }));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   const fileChanged = (event: ChangeEvent<HTMLInputElement>) => {
@@ -271,6 +285,8 @@ export function CreateFeature() {
         {
           pages: pagesForExport(pages, coverDurationMs, bodyDurationMs),
           readingDirection: direction,
+          coverDurationMs,
+          bodyDurationMs,
           textMetadata,
         },
         setProgress,
@@ -372,13 +388,6 @@ export function CreateFeature() {
           />
         </div>
       </details>
-      <div className="canvas-note">
-        <Images aria-hidden="true" size={20} />
-        <div>
-          <strong>{t("creator.canvas_hint")}</strong>
-          <span>{t("creator.transparent_padding")}</span>
-        </div>
-      </div>
       <button
         type="button"
         className="button primary wide"
@@ -418,7 +427,7 @@ export function CreateFeature() {
         ref={fileInput}
         className="visually-hidden"
         type="file"
-        accept="image/*,.apng"
+        accept="image/*,.apng,.zip,application/zip"
         multiple
         onChange={fileChanged}
       />
@@ -443,9 +452,7 @@ export function CreateFeature() {
               action={t("creator.add_images")}
               onChoose={chooseFiles}
               onFiles={(files) => void addFiles(files)}
-            >
-              <small>{t("creator.filename_sort")}</small>
-            </DropSurface>
+            />
           ) : (
             <>
               <div className="creator-toolbar">

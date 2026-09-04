@@ -1,7 +1,16 @@
 import type { ComicPage } from "../comic/types";
-import { naturalSorted } from "../comic/naturalSort";
 
 const THUMBNAIL_SIZE = 320;
+const MAX_IMAGE_PIXELS = 100_000_000;
+
+export interface ImageRegion {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  targetWidth: number;
+  targetHeight: number;
+}
 
 async function loadHtmlImage(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file);
@@ -31,7 +40,7 @@ function sourceSize(source: ImageBitmap | HTMLImageElement): [number, number] {
 }
 
 async function thumbnailBlob(
-  source: ImageBitmap | HTMLImageElement,
+  source: CanvasImageSource,
   width: number,
   height: number,
 ): Promise<Blob> {
@@ -50,6 +59,15 @@ async function thumbnailBlob(
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error("image.thumbnail_failed"));
+    }, "image/png");
+  });
+}
+
+function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("image.encode_failed"));
     }, "image/png");
   });
 }
@@ -78,23 +96,70 @@ export async function importImage(file: File, isCover: boolean): Promise<ComicPa
   }
 }
 
-export async function importImages(
-  files: File[],
-  hasExistingPages: boolean,
-): Promise<{ pages: ComicPage[]; failures: number }> {
-  const candidates = naturalSorted(
-    files.filter((file) => file.type.startsWith("image/") || /\.(png|apng|jpe?g|webp|gif|bmp)$/i.test(file.name)),
-  );
-  const pages: ComicPage[] = [];
-  let failures = 0;
-  for (const file of candidates) {
-    try {
-      pages.push(await importImage(file, !hasExistingPages && pages.length === 0));
-    } catch {
-      failures += 1;
-    }
+export async function importImageRegion(
+  file: File,
+  name: string,
+  region: ImageRegion,
+  isCover: boolean,
+): Promise<ComicPage> {
+  if (
+    region.width <= 0 ||
+    region.height <= 0 ||
+    region.targetWidth <= 0 ||
+    region.targetHeight <= 0 ||
+    region.targetWidth * region.targetHeight > MAX_IMAGE_PIXELS
+  ) {
+    throw new Error("image.invalid_dimensions");
   }
-  return { pages, failures };
+  const source = await decodedSource(file);
+  try {
+    const [sourceWidth, sourceHeight] = sourceSize(source);
+    if (
+      region.left < 0 ||
+      region.top < 0 ||
+      region.left + region.width > sourceWidth ||
+      region.top + region.height > sourceHeight
+    ) {
+      throw new Error("image.invalid_region");
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = region.targetWidth;
+    canvas.height = region.targetHeight;
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) throw new Error("image.canvas_unavailable");
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      source,
+      region.left,
+      region.top,
+      region.width,
+      region.height,
+      0,
+      0,
+      region.targetWidth,
+      region.targetHeight,
+    );
+    const [image, thumbnail] = await Promise.all([
+      canvasBlob(canvas),
+      thumbnailBlob(canvas, region.targetWidth, region.targetHeight),
+    ]);
+    const output = new File([image], name, {
+      type: "image/png",
+      lastModified: file.lastModified,
+    });
+    return {
+      id: crypto.randomUUID(),
+      file: output,
+      name,
+      width: region.targetWidth,
+      height: region.targetHeight,
+      thumbnailUrl: URL.createObjectURL(thumbnail),
+      isCover,
+    };
+  } finally {
+    if (source instanceof ImageBitmap) source.close();
+  }
 }
 
 export function releasePage(page: ComicPage): void {

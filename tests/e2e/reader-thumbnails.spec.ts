@@ -17,24 +17,7 @@ async function expectActiveThumbnailVisible(page: Page): Promise<void> {
   })).toBe(true);
 }
 
-async function storedReaderPages(page: Page): Promise<number[]> {
-  return page.evaluate(async () => new Promise<number[]>((resolve, reject) => {
-    const request = indexedDB.open("comicapng-web");
-    request.addEventListener("error", () => reject(request.error));
-    request.addEventListener("success", () => {
-      const database = request.result;
-      const transaction = database.transaction("reader-progress", "readonly");
-      const records = transaction.objectStore("reader-progress").getAll();
-      records.addEventListener("success", () => {
-        resolve((records.result as Array<{ page: number }>).map((record) => record.page));
-        database.close();
-      });
-      records.addEventListener("error", () => reject(records.error));
-    });
-  }));
-}
-
-test("reader thumbnail rail follows navigation and restored progress", async ({ page }) => {
+test("reader thumbnail rail follows navigation and resets for a reopened comic", async ({ page }) => {
   const comic = makeMultiPageApng();
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("./");
@@ -79,7 +62,6 @@ test("reader thumbnail rail follows navigation and restored progress", async ({ 
   await page.locator(".page-jump input").fill("20");
   await expect(page.locator(".reader-counter")).toHaveText("20 / 24");
   await expectActiveThumbnailVisible(page);
-  await expect.poll(() => storedReaderPages(page)).toContain(19);
 
   await page.reload();
   await page.locator('[data-testid="nav-read"]:visible').click();
@@ -88,6 +70,6 @@ test("reader thumbnail rail follows navigation and restored progress", async ({ 
     mimeType: "image/png",
     buffer: comic,
   });
-  await expect(page.locator(".reader-counter")).toHaveText("20 / 24");
+  await expect(page.locator(".reader-counter")).toHaveText("1 / 24");
   await expectActiveThumbnailVisible(page);
 });

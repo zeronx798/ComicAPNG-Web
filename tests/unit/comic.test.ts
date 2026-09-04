@@ -29,4 +29,12 @@ describe("comic model", () => {
     expect(exported.map((item) => item.name)).toEqual(["two.png", "one.png", "three.png"]);
     expect(exported.map((item) => item.durationMs)).toEqual([10_000, 5_000, 5_000]);
   });
+
+  it("keeps imported frame timing attached to reordered pages", () => {
+    const first = { ...page("one.png"), durationMs: 125 };
+    const second = { ...page("two.png", true), durationMs: 375 };
+    const exported = pagesForExport([first, second], 10_000, 5_000);
+    expect(exported.map((item) => item.name)).toEqual(["two.png", "one.png"]);
+    expect(exported.map((item) => item.durationMs)).toEqual([375, 125]);
+  });
 });
